@@ -1,0 +1,88 @@
+replicaCount: 4
+
+image:
+  repository: hyperledger/besu
+  tag: latest
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+besu:
+  networkId: 1337
+  rpc:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8545
+    api: ["ETH", "NET", "WEB3", "QBFT", "TXPOOL", "ADMIN"]
+    corsOrigins: ["*"]
+  ws:
+    enabled: true
+    host: "0.0.0.0"
+    port: 8546
+    api: ["ETH", "NET", "WEB3"]
+  p2p:
+    enabled: true
+    host: "0.0.0.0"
+    port: 30303
+    discovery: false
+  dataPath: /data/besu
+  genesisFile: genesis.json
+
+service:
+  headless:
+    enabled: true
+  rpc:
+    type: ClusterIP
+    port: 8545
+  ws:
+    type: ClusterIP
+    port: 8546
+  p2p:
+    type: ClusterIP
+    port: 30303
+
+ingress:
+  enabled: false
+  className: nginx
+  host: localhost
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+storage:
+  data:
+    enabled: true
+    size: 2Gi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+  keys:
+    enabled: false
+    size: 50Mi
+    storageClassName: standard
+    accessMode: ReadWriteOnce
+
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readiness:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startup:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 40

@@ -1,0 +1,239 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "besu.fullname" . }}
+  labels:
+    {{- include "besu.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "besu.fullname" . }}-headless
+  replicas: {{ .Values.replicaCount }}
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      {{- include "besu.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "besu.selectorLabels" . | nindent 8 }}
+    spec:
+      enableServiceLinks: false
+      serviceAccountName: {{ include "besu.fullname" . }}
+      initContainers:
+      - name: get-validator-key
+        image: bitnami/kubectl:latest
+        command:
+          - sh
+          - -c
+          - |
+            NODE_NUM=$(hostname | sed 's/.*-//')
+            SECRET_NAME="besu-${NODE_NUM}-key"
+
+            if kubectl get secret "$SECRET_NAME" -n {{ .Release.Namespace }} >/dev/null 2>&1; then
+              echo "Found secret, copying key..."
+              kubectl get secret "$SECRET_NAME" -n {{ .Release.Namespace }} -o jsonpath='{.data.key}' | base64 -d > {{ .Values.besu.dataPath }}/key
+              chmod 600 {{ .Values.besu.dataPath }}/key
+              echo "Key copied successfully"
+            else
+              echo "No secret found."
+            fi
+        env:
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: data
+          mountPath: {{ .Values.besu.dataPath }}
+      containers:
+      - name: validator-peering
+        image: curlimages/curl:latest
+        volumeMounts:
+        - name: besu-validators
+          mountPath: /config/nodes
+        command:
+          - sh
+          - -c
+          - |
+            echo "Waiting for Besu to be ready..."
+            while ! curl -sf http://localhost:8545 > /dev/null; do
+              sleep 2
+            done
+            echo "Besu is ready, starting peer connection..."
+
+            POD_NAME=$(hostname)
+            NODES=$(cat /config/nodes/enodes.txt)
+
+            # Just keep adding peers
+            while true; do
+              for node in $NODES; do
+                PUBKEY=$(echo "$node" | cut -d':' -f1)
+                PEER_NAME=$(echo "$node" | cut -d':' -f2)
+
+                if [ "$PEER_NAME" = "$POD_NAME" ]; then
+                  continue
+                fi
+
+                PEER_HOST="$PEER_NAME.besu-headless.sidechain.svc.cluster.local"  
+                PEER_IP=$(nslookup "$PEER_HOST" 2>/dev/null | grep "^Address" | tail -1 | awk '{print $2}')
+
+                if [ ! -z "$PEER_IP" ]; then
+                  NODE_URL="enode://$PUBKEY@$PEER_IP:30303"
+
+                  curl -s -X POST -H "Content-Type: application/json" \
+                    --data "{\"jsonrpc\":\"2.0\",\"method\":\"admin_addPeer\",\"params\":[\"$NODE_URL\"],\"id\":1}" \
+                    http://localhost:8545 > /dev/null 2>&1
+                fi
+              done
+
+              PEER_COUNT=$(curl -s -X POST -H "Content-Type: application/json" \
+                --data '{"jsonrpc":"2.0","method":"net_peerCount","params":[],"id":1}' \
+                http://localhost:8545 | grep -o '"result":"0x[0-9]*"' | cut -d'"' -f4)
+
+              echo "Current peer count: $PEER_COUNT"
+              sleep 20
+            done
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        command:
+          - /bin/bash
+          - -c
+          - |
+            exec /opt/besu/bin/besu \
+              --data-path={{ .Values.besu.dataPath }} \
+              --genesis-file=/config/{{ .Values.besu.genesisFile }} \
+              --network-id={{ .Values.besu.networkId }} \
+              {{- if .Values.besu.rpc.enabled }}
+              --rpc-http-enabled \
+              --rpc-http-host={{ .Values.besu.rpc.host }} \
+              --rpc-http-port={{ .Values.besu.rpc.port }} \
+              --rpc-http-api={{ join "," .Values.besu.rpc.api }} \
+              --rpc-http-cors-origins={{ join "," .Values.besu.rpc.corsOrigins }} \
+              {{- end }}
+              {{- if .Values.besu.ws.enabled }}
+              --rpc-ws-enabled \
+              --rpc-ws-host={{ .Values.besu.ws.host }} \
+              --rpc-ws-port={{ .Values.besu.ws.port }} \
+              --rpc-ws-api={{ join "," .Values.besu.ws.api }} \
+              {{- end }}
+              {{- if .Values.besu.p2p.enabled }}
+              --p2p-enabled=true \
+              --p2p-host={{ .Values.besu.p2p.host }} \
+              --p2p-port={{ .Values.besu.p2p.port }} \
+              --discovery-enabled={{ .Values.besu.p2p.discovery }} \
+              {{- end }}
+              --fast-sync-min-peers=0 \
+              --host-allowlist="*" \
+              --min-gas-price=0 \
+              --tx-pool-min-gas-price=0 \
+              --min-priority-fee=0 \
+              --rpc-http-max-active-connections=100 \
+              --logging=INFO
+        ports:
+        {{- if .Values.besu.rpc.enabled }}
+        - name: rpc
+          containerPort: {{ .Values.besu.rpc.port }}
+          protocol: TCP
+        {{- end }}
+        {{- if .Values.besu.ws.enabled }}
+        - name: ws
+          containerPort: {{ .Values.besu.ws.port }}
+          protocol: TCP
+        {{- end }}
+        {{- if .Values.besu.p2p.enabled }}
+        - name: p2p-tcp
+          containerPort: {{ .Values.besu.p2p.port }}
+          protocol: TCP
+        - name: p2p-udp
+          containerPort: {{ .Values.besu.p2p.port }}
+          protocol: UDP
+        {{- end }}
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: data
+          mountPath: {{ .Values.besu.dataPath }}
+        - name: genesis-config
+          mountPath: /config
+        {{- if .Values.storage.keys.enabled }}
+        - name: keys
+          mountPath: {{ .Values.besu.dataPath }}/keys
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- if .Values.probes.liveness.enabled }}
+        livenessProbe:
+          tcpSocket:
+            port: rpc
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.liveness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.probes.readiness.enabled }}
+        readinessProbe:
+          tcpSocket:
+            port: rpc
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.readiness.failureThreshold }}
+        {{- end }}
+        {{- if .Values.probes.startup.enabled }}
+        startupProbe:
+          tcpSocket:
+            port: rpc
+          initialDelaySeconds: {{ .Values.probes.startup.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.startup.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.startup.timeoutSeconds }}
+          failureThreshold: {{ .Values.probes.startup.failureThreshold }}
+        {{- end }}
+      volumes:
+      - name: genesis-config
+        configMap:
+          name: {{ include "besu.fullname" . }}-genesis
+      - name: besu-validators
+        configMap:
+          name: {{ include "besu.fullname" . }}-validators
+  volumeClaimTemplates:
+  {{- if .Values.storage.data.enabled }}
+  - metadata:
+      name: data
+      labels:
+        {{- include "besu.labels" . | nindent 8 }}
+    spec:
+      accessModes:
+        - {{ .Values.storage.data.accessMode }}
+      storageClassName: {{ .Values.storage.data.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.data.size }}
+  {{- end }}
+  {{- if .Values.storage.keys.enabled }}
+  - metadata:
+      name: keys
+      labels:
+        {{- include "besu.labels" . | nindent 8 }}
+    spec:
+      accessModes:
+        - {{ .Values.storage.keys.accessMode }}
+      storageClassName: {{ .Values.storage.keys.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.storage.keys.size }}
+  {{- end }}

@@ -1,0 +1,15 @@
+controller:
+  admissionWebhooks:
+    enabled: false
+  service:
+    type: NodePort
+    ports:
+      http: 80
+      https: 443
+  hostPort:
+    enabled: true
+    ports:
+      http: 80
+      https: 443
+  ingressClassResource:
+    default: true

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: besu
+description: Deploys a 4-node Hyperledger Besu cluster for the Kaleido challenge project
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

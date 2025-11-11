@@ -1,0 +1,65 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/hyperledger/firefly-signer
+  tag: v1.1.3
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+signer:
+  port: 8545
+  address: "0.0.0.0"
+  
+  backend:
+    url: "http://besu-rpc.sidechain.svc.cluster.local:8545"
+    chainId: 1337
+  ws:
+    enabled: true
+    url: "ws://besu-ws.sidechain.svc.cluster.local:8546"
+  filestore:
+    path: /data/keystore
+    passwordFile: /data/password.txt
+
+service:
+  type: ClusterIP
+  port: 8545
+  targetPort: 8545
+
+ingress:
+  enabled: true
+  className: nginx
+  host: localhost
+  path: /signer
+
+storage:
+  enabled: true
+  size: 50Mi
+  storageClassName: standard
+  accessMode: ReadWriteOnce
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+accounts:
+  enabled: true
+  count: 5
+
+probes:
+  liveness:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+  readiness:
+    enabled: true
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+

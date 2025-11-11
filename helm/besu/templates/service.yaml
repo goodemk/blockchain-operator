@@ -1,0 +1,90 @@
+{{- if .Values.service.headless.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "besu.fullname" . }}-headless
+  labels:
+    {{- include "besu.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  sessionAffinity: None
+  publishNotReadyAddresses: true
+  selector:
+    {{- include "besu.selectorLabels" . | nindent 4 }}
+  ports:
+  {{- if .Values.besu.p2p.enabled }}
+  - name: p2p-tcp
+    port: {{ .Values.besu.p2p.port }}
+    targetPort: p2p-tcp
+    protocol: TCP
+  - name: p2p-udp
+    port: {{ .Values.besu.p2p.port }}
+    targetPort: p2p-udp
+    protocol: UDP
+  {{- end }}
+  {{- if .Values.besu.rpc.enabled }}
+  - name: rpc
+    port: {{ .Values.besu.rpc.port }}
+    targetPort: rpc
+    protocol: TCP
+  {{- end }}
+  {{- if .Values.besu.ws.enabled }}
+  - name: ws
+    port: {{ .Values.besu.ws.port }}
+    targetPort: ws
+    protocol: TCP
+  {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "besu.fullname" . }}-rpc
+  labels:
+    {{- include "besu.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.rpc.type }}
+  selector:
+    {{- include "besu.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: rpc
+    port: {{ .Values.service.rpc.port }}
+    targetPort: rpc
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "besu.fullname" . }}-ws
+  labels:
+    {{- include "besu.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.ws.type }}
+  selector:
+    {{- include "besu.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: ws
+    port: {{ .Values.service.ws.port }}
+    targetPort: ws
+    protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "besu.fullname" . }}-p2p
+  labels:
+    {{- include "besu.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.p2p.type }}
+  selector:
+    {{- include "besu.selectorLabels" . | nindent 4 }}
+  ports:
+  - name: p2p-tcp
+    port: {{ .Values.service.p2p.port }}
+    targetPort: p2p-tcp
+    protocol: TCP
+  - name: p2p-udp
+    port: {{ .Values.service.p2p.port }}
+    targetPort: p2p-udp
+    protocol: UDP

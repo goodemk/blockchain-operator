@@ -1,0 +1,24 @@
+apiVersion: racecourse.kaleido.io/v1alpha1
+kind: Racecourse
+metadata:
+  name: min-racecourse
+  namespace: sidechain
+spec:
+  walletService:
+    name: firefly-signer
+    namespace: sidechain
+    port: 8545
+  contractAddress: ""
+  ingress:
+    enabled: true
+    className: nginx
+    host: racecourse.localhost
+    path: /
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+

@@ -1,0 +1,283 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.19.0
+  name: racecourses.racecourse.kaleido.io
+spec:
+  group: racecourse.kaleido.io
+  names:
+    kind: Racecourse
+    listKind: RacecourseList
+    plural: racecourses
+    shortNames:
+    - rcs
+    singular: racecourse
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.availableReplicas
+      name: Replicas
+      type: integer
+    - jsonPath: .status.url
+      name: URL
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: The actual custom resource that users will create
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: The desired state of Racecourse instance
+            properties:
+              contractAddress:
+                description: |-
+                  The Ethereum address of the deployed Race contract
+                  If empty, the application will deploy a new contract automatically
+                  Must be either empty or valid 42-character hex string
+                pattern: ^(0x[a-fA-F0-9]{40})?$
+                type: string
+              image:
+                description: Sets the container image
+                properties:
+                  pullPolicy:
+                    default: IfNotPresent
+                    description: The image pull policy
+                    enum:
+                    - Always
+                    - Never
+                    - IfNotPresent
+                    type: string
+                  repository:
+                    default: racecourse
+                    description: The repository from which to pull the image
+                    type: string
+                  tag:
+                    default: 0.0.1
+                    description: Tags associated with the image
+                    type: string
+                type: object
+              ingress:
+                description: The ingress configuration
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Additional pod-level annotations for the ingress
+                      resource
+                    type: object
+                  className:
+                    default: nginx
+                    description: The name of the ingress class
+                    type: string
+                  enabled:
+                    default: true
+                    description: Determines if an ingress resource should be created
+                    type: boolean
+                  host:
+                    description: The hostname for the ingress
+                    type: string
+                  path:
+                    description: The path for the ingress
+                    type: string
+                type: object
+              replicas:
+                default: 2
+                description: The number of racecourse pods to run
+                format: int32
+                minimum: 1
+                type: integer
+              resources:
+                description: Defines resource requests/limits on the pods
+                properties:
+                  claims:
+                    description: |-
+                      Claims lists the names of resources, defined in spec.resourceClaims,
+                      that are used by this container.
+
+                      This field depends on the
+                      DynamicResourceAllocation feature gate.
+
+                      This field is immutable. It can only be set for containers.
+                    items:
+                      description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                      properties:
+                        name:
+                          description: |-
+                            Name must match the name of one entry in pod.spec.resourceClaims of
+                            the Pod where this field is used. It makes that resource available
+                            inside a container.
+                          type: string
+                        request:
+                          description: |-
+                            Request is the name chosen for a request in the referenced claim.
+                            If empty, everything from the claim is made available, otherwise
+                            only the result of this request.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  limits:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Limits describes the maximum amount of compute resources allowed.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                  requests:
+                    additionalProperties:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    description: |-
+                      Requests describes the minimum amount of compute resources required.
+                      If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                      otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                      More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                    type: object
+                type: object
+              walletService:
+                description: WalletService defines how to connect to the wallet service
+                properties:
+                  name:
+                    description: The name of the Kubernetes Service associated with
+                      the wallet service
+                    type: string
+                  namespace:
+                    description: |-
+                      The namespace where the wallet Service is located
+                      If empty, it defaults to the same namespace as the Racecourse instance
+                    type: string
+                  port:
+                    default: 8545
+                    description: The JSON-RPC port associated with the wallet service
+                    format: int32
+                    type: integer
+                required:
+                - name
+                type: object
+            required:
+            - walletService
+            type: object
+          status:
+            description: The observed state of Racecourse
+            properties:
+              availableReplicas:
+                description: The number of ready pods
+                format: int32
+                type: integer
+              conditions:
+                description: The latest available observations of the Racecourse instance's
+                  state
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              deploymentReady:
+                description: Indicates whether the Deployment is ready
+                type: boolean
+              phase:
+                description: The current phase of the Racecourse instance
+                enum:
+                - Pending
+                - Running
+                - Failed
+                - Unknown
+                type: string
+              url:
+                description: The URL where the racecourse app can be accessed
+                type: string
+              walletServiceEndpoint:
+                description: The resolved wallet service endpoint URL
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

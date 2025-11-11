@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "firefly-signer.fullname" . }}
+  labels:
+    {{- include "firefly-signer.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "firefly-signer.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "firefly-signer.selectorLabels" . | nindent 8 }}
+    spec:
+      initContainers:
+      - name: create-keystore-dir
+        image: busybox:latest
+        command:
+          - sh
+          - -c
+          - |
+            echo "Creating keystore directory..."
+            mkdir -p {{ .Values.signer.filestore.path }}
+            chmod 755 {{ .Values.signer.filestore.path }}
+            echo "Creating password file..."
+            echo -n "password" > {{ .Values.signer.filestore.passwordFile }}
+            chmod 644 {{ .Values.signer.filestore.passwordFile }}
+        volumeMounts:
+        - name: keystore
+          mountPath: /data
+        - name: tmp
+          mountPath: /tmp
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        args:
+          - -f
+          - /config/config.yaml
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.targetPort }}
+          protocol: TCP
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        volumeMounts:
+        - name: keystore
+          mountPath: /data
+        - name: config
+          mountPath: /config
+        - name: tmp
+          mountPath: /tmp
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- if .Values.probes.liveness.enabled }}
+        livenessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: {{ .Values.probes.liveness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.liveness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.liveness.timeoutSeconds }}
+        {{- end }}
+        {{- if .Values.probes.readiness.enabled }}
+        readinessProbe:
+          tcpSocket:
+            port: http
+          initialDelaySeconds: {{ .Values.probes.readiness.initialDelaySeconds }}
+          periodSeconds: {{ .Values.probes.readiness.periodSeconds }}
+          timeoutSeconds: {{ .Values.probes.readiness.timeoutSeconds }}
+        {{- end }}
+      volumes:
+      - name: keystore
+        {{- if .Values.storage.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "firefly-signer.fullname" . }}-pvc
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      - name: config
+        configMap:
+          name: {{ include "firefly-signer.fullname" . }}-config
+      - name: tmp
+        emptyDir: {}
+

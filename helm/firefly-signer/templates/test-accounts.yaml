@@ -1,0 +1,55 @@
+{{- if .Values.accounts.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "firefly-signer.fullname" . }}-create-accounts
+  labels:
+    {{- include "firefly-signer.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: create-accounts
+        image: ethereum/client-go:latest
+        command:
+          - sh
+          - -c
+          - |
+            set -e
+            
+            KEYSTORE_PATH="{{ .Values.signer.filestore.path }}"
+            PASSWORD_FILE="{{ .Values.signer.filestore.passwordFile | default "/data/password.txt" }}"
+            COUNT={{ .Values.accounts.count }}
+            
+            echo "Creating $COUNT accounts..."
+            mkdir -p "$KEYSTORE_PATH"
+            rm -f "$KEYSTORE_PATH"/* 
+
+            echo -n "password" > "$PASSWORD_FILE"
+
+            for i in $(seq 1 $COUNT); do
+              echo "Generating account $i of $COUNT..."
+
+              OUTPUT=$(geth account new --datadir /tmp/geth-data --password "$PASSWORD_FILE" 2>&1)
+
+              ADDR=$(echo "$OUTPUT" | grep -oE '0x[a-fA-F0-9]{40}' | sed 's/0x//')
+              KEYFILE=$(ls -t /tmp/geth-data/keystore/ | head -1)
+
+              cp "/tmp/geth-data/keystore/$KEYFILE" "$KEYSTORE_PATH/${ADDR}"
+
+              rm -rf /tmp/geth-data/keystore/*
+            done
+        volumeMounts:
+        - name: keystore
+          mountPath: /data
+      volumes:
+      - name: keystore
+        persistentVolumeClaim:
+          claimName: {{ include "firefly-signer.fullname" . }}-pvc
+{{- end }}
+

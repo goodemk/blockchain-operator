@@ -7,7 +7,7 @@ The goal of this challenge project is to deploy a private blockchain for use wit
 You'll need these tools if you don't already have them:
   * colima
   * kind
-  * Kubectl
+  * kubectl
   * helm
   * docker
   * jq
@@ -30,10 +30,10 @@ For this project, I created a few Helm charts to make deployments more straightf
 
 ## The Operator
 
-The Racecourse Operator was scaffolded by Kubebuilder and manages several basic Kubernetes resources (Deployment, Service, Configmap, and Ingress). There are two examples of the Racecourse CRDs in `operator/config/samples`: minimal and production-grade. The minimal example works locally, but the production-grade example requires some additional tooling and infrasatructre (TLS, image repo) to be fully operational.
+The Racecourse Operator was scaffolded by Kubebuilder and manages several basic Kubernetes resources (Deployment, Service, ConfigMap, and Ingress). There are two examples of the Racecourse CRDs in `operator/config/samples`: minimal and production-grade. The minimal example works locally, but the production-grade example requires some additional tooling and infrastructure (TLS, image repo) to be fully operational.
 
 ## The Application
 
 I had to make some modifications to the Racecourse application in order to get it to function properly, so I forked it into this repo.
-* In `server.js`, I added some environment variables in order to bypass the login screen while testing the application. Since we're not using basic auth, it seemed unnecessary to keep punching in the host path.
-* In `Racecoure.js`, I was forced to bypass some assertions that were causing the app to crash completely after loading the contract. Apparently this was due to an issue with the way what Web3 (or this very old version of it) handles filters. In their place I added some basic logic to better handle unexpected events (basically null results or crashes). The instructions did say that major dependency upgrades weren't necessary, so I tried to modify this as little as possible.
+* In `server.js`, I added some environment variables in order to bypass the login screen while testing the application. Since we're not using basic auth, it seemed unnecessary to keep punching in the host path. The operator provisions the underlying values into a ConfigMap and they're checked at runtime in order to determine how the app should load.
+* In `Racecourse.js`, I was forced to bypass some assertions that were causing the app to crash completely after loading the contract. Apparently this was due to an issue with the way that Web3 (or this very old version of it) handles filters. In their place I added some basic logic to better handle unexpected events (basically null results or crashes). The instructions did say that major dependency upgrades weren't necessary, so I tried to modify this as little as possible. As a result of these changes, the app should load automatically as soon as you navigate to `racecourse.localhost`.
